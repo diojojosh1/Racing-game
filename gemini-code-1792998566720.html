@@ -1,0 +1,1378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Apex Velocity - 2D Top-Down Racing</title>
+  <style>
+    /* Reset & Base Styles */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body {
+      background: radial-gradient(circle at center, #1e2430 0%, #0d1017 100%);
+      color: #f0f4f8;
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 16px;
+      overflow: hidden;
+    }
+
+    /* Responsive Canvas Container with Fixed 4:3 Aspect Ratio */
+    #game-container {
+      position: relative;
+      width: 100%;
+      max-width: 800px;
+      aspect-ratio: 4 / 3;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 2px solid #2e3846;
+      box-shadow:
+        0 24px 60px rgba(0, 0, 0, 0.75),
+        0 0 0 1px rgba(255, 255, 255, 0.06);
+      background-color: #141820;
+    }
+
+    #gameCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Utility Class */
+    .hidden {
+      display: none !important;
+    }
+
+    /* Digital Dashboard HUD */
+    .hud-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .hud-panel {
+      background: rgba(13, 17, 24, 0.82);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      padding: 12px 16px;
+      min-width: 195px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+
+    .hud-left {
+      border-left: 4px solid #00e5ff;
+    }
+
+    .hud-right {
+      border-right: 4px solid #ff3d5a;
+      text-align: right;
+    }
+
+    .hud-row {
+      display: flex;
+      gap: 20px;
+      justify-content: flex-end;
+      margin-bottom: 6px;
+    }
+
+    .hud-metric {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .hud-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      color: #8a99ad;
+      margin-bottom: 2px;
+    }
+
+    .hud-value-group {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    #speed-value {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 1.9rem;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1;
+      text-shadow: 0 0 12px rgba(0, 229, 255, 0.45);
+    }
+
+    .hud-unit {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #00e5ff;
+    }
+
+    .hud-value {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: #ffffff;
+    }
+
+    .total-time-metric {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 5px;
+    }
+
+    .hud-value-sm {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #cbd5e1;
+    }
+
+    /* Tachometer / Speed Bar */
+    .speed-bar-track {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      margin: 8px 0;
+      overflow: hidden;
+    }
+
+    #speed-bar-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #00e5ff 0%, #00ff88 65%, #ff3d5a 100%);
+      transition: width 0.05s linear;
+    }
+
+    .status-badge {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(0, 229, 255, 0.15);
+      color: #00e5ff;
+    }
+
+    .status-badge.drift {
+      background: rgba(255, 170, 0, 0.22);
+      color: #ffaa00;
+    }
+
+    .status-badge.offroad {
+      background: rgba(255, 61, 90, 0.25);
+      color: #ff4d6a;
+    }
+
+    /* Center Menu Overlays (Start & Game Over) */
+    .menu-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(10, 13, 19, 0.78);
+      backdrop-filter: blur(6px);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 24px;
+      z-index: 20;
+    }
+
+    .menu-card {
+      background: linear-gradient(160deg, rgba(25, 32, 44, 0.95), rgba(15, 19, 27, 0.98));
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 16px;
+      padding: 36px 40px;
+      max-width: 460px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+    }
+
+    .menu-tag {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.18em;
+      color: #00e5ff;
+      background: rgba(0, 229, 255, 0.12);
+      padding: 5px 12px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+    }
+
+    .finish-tag {
+      color: #00ff88;
+      background: rgba(0, 255, 136, 0.12);
+    }
+
+    .menu-title {
+      font-size: 2.5rem;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      font-style: italic;
+      color: #ffffff;
+      margin-bottom: 12px;
+    }
+
+    .menu-title span {
+      color: #ff3d5a;
+    }
+
+    .menu-subtitle {
+      font-size: 0.95rem;
+      line-height: 1.5;
+      color: #9fb0c7;
+      margin-bottom: 24px;
+    }
+
+    /* Controls Info Grid */
+    .controls-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+
+    .control-item {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 10px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .key-badge {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.82rem;
+      font-weight: 800;
+      color: #00e5ff;
+    }
+
+    .control-desc {
+      font-size: 0.75rem;
+      color: #cbd5e1;
+    }
+
+    /* Results Box on Game Over */
+    .results-box {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin: 20px 0 28px;
+    }
+
+    .result-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+    }
+
+    .primary-result {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 12px;
+      margin-bottom: 6px;
+    }
+
+    .result-label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: #94a3b8;
+    }
+
+    .result-value {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 1.65rem;
+      font-weight: 800;
+      color: #00ff88;
+    }
+
+    .result-value-sm {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #00e5ff;
+    }
+
+    /* Interactive Buttons */
+    .btn {
+      width: 100%;
+      padding: 15px 28px;
+      font-size: 1rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #ff3d5a 0%, #ff1e42 100%);
+      color: #ffffff;
+      box-shadow: 0 8px 24px rgba(255, 61, 90, 0.4);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(255, 61, 90, 0.6);
+      filter: brightness(1.08);
+    }
+
+    .btn-restart {
+      background: linear-gradient(135deg, #00e5ff 0%, #00a8ff 100%);
+      color: #09101a;
+      box-shadow: 0 8px 24px rgba(0, 229, 255, 0.35);
+    }
+
+    .btn-restart:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(0, 229, 255, 0.55);
+      filter: brightness(1.08);
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <!-- Heads-Up Display (HUD) -->
+    <div id="hud" class="hud-overlay hidden">
+      <div class="hud-panel hud-left">
+        <div class="hud-metric">
+          <span class="hud-label">SPEED</span>
+          <div class="hud-value-group">
+            <span id="speed-value">000</span>
+            <span class="hud-unit">KM/H</span>
+          </div>
+        </div>
+        <div class="speed-bar-track">
+          <div id="speed-bar-fill"></div>
+        </div>
+        <div id="status-badge" class="status-badge">ASPHALT</div>
+      </div>
+
+      <div class="hud-panel hud-right">
+        <div class="hud-row">
+          <div class="hud-metric">
+            <span class="hud-label">LAP</span>
+            <span id="lap-value" class="hud-value">1 / 3</span>
+          </div>
+          <div class="hud-metric">
+            <span class="hud-label">LAP TIME</span>
+            <span id="lap-time-value" class="hud-value">00:00.00</span>
+          </div>
+        </div>
+        <div class="hud-metric total-time-metric">
+          <span class="hud-label">TOTAL TIME</span>
+          <span id="total-time-value" class="hud-value-sm">00:00.00</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Menu Overlay -->
+    <div id="main-menu" class="menu-overlay">
+      <div class="menu-card">
+        <div class="menu-tag">2D KINEMATICS RACING ENGINE</div>
+        <h1 class="menu-title">APEX <span>VELOCITY</span></h1>
+        <p class="menu-subtitle">
+          Master high-speed cornering, manage lateral grip and drift physics, avoid track hazards, and set the fastest 3-lap time.
+        </p>
+
+        <div class="controls-grid">
+          <div class="control-item">
+            <span class="key-badge">W / &uarr;</span>
+            <span class="control-desc">Accelerate</span>
+          </div>
+          <div class="control-item">
+            <span class="key-badge">S / &darr;</span>
+            <span class="control-desc">Brake / Reverse</span>
+          </div>
+          <div class="control-item">
+            <span class="key-badge">A D / &larr; &rarr;</span>
+            <span class="control-desc">Steer / Drift</span>
+          </div>
+        </div>
+
+        <button id="start-btn" class="btn btn-primary">START RACE</button>
+      </div>
+    </div>
+
+    <!-- Game Over Overlay -->
+    <div id="game-over-menu" class="menu-overlay hidden">
+      <div class="menu-card">
+        <div class="menu-tag finish-tag">CHECKERED FLAG</div>
+        <h1 class="menu-title">RACE <span>COMPLETE</span></h1>
+
+        <div class="results-box">
+          <div class="result-row primary-result">
+            <span class="result-label">FINAL RACE TIME</span>
+            <span id="final-time" class="result-value">00:00.00</span>
+          </div>
+          <div class="result-row">
+            <span class="result-label">BEST LAP TIME</span>
+            <span id="best-lap-time" class="result-value-sm">00:00.00</span>
+          </div>
+        </div>
+
+        <button id="restart-btn" class="btn btn-restart">RACE AGAIN</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * APEX VELOCITY - 2D Top-Down Racing Game & Kinematics Engine
+     */
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // UI Elements
+    const hudEl = document.getElementById('hud');
+    const mainMenuEl = document.getElementById('main-menu');
+    const gameOverMenuEl = document.getElementById('game-over-menu');
+    const startBtn = document.getElementById('start-btn');
+    const restartBtn = document.getElementById('restart-btn');
+
+    const speedValueEl = document.getElementById('speed-value');
+    const speedBarFillEl = document.getElementById('speed-bar-fill');
+    const statusBadgeEl = document.getElementById('status-badge');
+    const lapValueEl = document.getElementById('lap-value');
+    const lapTimeValueEl = document.getElementById('lap-time-value');
+    const totalTimeValueEl = document.getElementById('total-time-value');
+    const finalTimeEl = document.getElementById('final-time');
+    const bestLapTimeEl = document.getElementById('best-lap-time');
+
+    // Track & Race Constants
+    const CANVAS_WIDTH = canvas.width;
+    const CANVAS_HEIGHT = canvas.height;
+    const CAR_SCREEN_Y = 465; // Fixed vertical camera anchor for the player's car
+    const ROAD_HALF_WIDTH = 175;
+    const RUMBLE_WIDTH = 18;
+    const LAP_DISTANCE = 5200; // World units per lap
+    const TOTAL_LAPS = 3;
+
+    // Game State
+    const STATE = {
+      MENU: 'MENU',
+      RACING: 'RACING',
+      GAMEOVER: 'GAMEOVER'
+    };
+
+    let gameState = STATE.MENU;
+    let lastFrameTime = performance.now();
+
+    // Race Timing & Progress
+    let totalRaceTime = 0;
+    let currentLapTime = 0;
+    let bestLapTime = Infinity;
+    let currentLap = 1;
+    let distanceTraveled = 0;
+
+    // Raw Key State & Smoothed Analog Inputs
+    const keys = {
+      up: false,
+      down: false,
+      left: false,
+      right: false
+    };
+
+    const input = {
+      throttle: 0, // Smoothed [-1, 1]
+      steer: 0     // Smoothed [-1, 1]
+    };
+
+    // Player Car Kinematics & Physics Object
+    const car = {
+      x: CANVAS_WIDTH / 2,
+      y: 0,                // World Y position (decreases as car drives forward up the track)
+      vx: 0,               // World velocity X
+      vy: 0,               // World velocity Y
+      ax: 0,               // World acceleration X
+      ay: 0,               // World acceleration Y
+      angle: 0,            // Physical chassis heading angle (radians, 0 = straight up)
+      visualAngle: 0,      // Rendered angle including drift slip offset
+      driftAngle: 0,       // Extra visual slip angle during high-speed drifts
+
+      // Physics Tuning Constants
+      width: 28,
+      length: 54,
+      enginePower: 680,      // Forward acceleration force
+      reversePower: 360,     // Reverse acceleration force
+      brakingForce: 950,     // Active braking deceleration
+      rollingResistance: 0.92, // Natural longitudinal friction per second
+      airDrag: 0.0011,       // Quadratic aerodynamic drag
+      lateralGrip: 9.5,      // Tire cornering stiffness / lateral friction
+      maxSteerRate: 2.85,    // Radians per second at optimal speed
+
+      // Dynamic state flags
+      isOffRoad: false,
+      isDrifting: false,
+      oilSlickTimer: 0,
+      hitFlashTimer: 0
+    };
+
+    // World Entities
+    let obstacles = [];
+    let particles = [];
+    let skidMarks = [];
+    let nextObstacleSpawnY = -500;
+
+    /**
+     * Computes the horizontal center of the winding road at any given world Y coordinate.
+     */
+    function getRoadCenterX(worldY) {
+      return (
+        CANVAS_WIDTH / 2 +
+        Math.sin(worldY * 0.0011) * 95 +
+        Math.cos(worldY * 0.00045) * 45
+      );
+    }
+
+    /**
+     * Formats seconds into MM:SS.mm digital stopwatch string.
+     */
+    function formatTime(seconds) {
+      if (!isFinite(seconds) || seconds < 0) return '00:00.00';
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      const hundredths = Math.floor((seconds % 1) * 100);
+      return (
+        String(mins).padStart(2, '0') +
+        ':' +
+        String(secs).padStart(2, '0') +
+        '.' +
+        String(hundredths).padStart(2, '0')
+      );
+    }
+
+    /**
+     * Resets the car, track obstacles, particles, and timers for a fresh 3-lap race.
+     */
+    function initRace() {
+      car.y = 0;
+      car.x = getRoadCenterX(0);
+      car.vx = 0;
+      car.vy = 0;
+      car.ax = 0;
+      car.ay = 0;
+      car.angle = 0;
+      car.visualAngle = 0;
+      car.driftAngle = 0;
+      car.isOffRoad = false;
+      car.isDrifting = false;
+      car.oilSlickTimer = 0;
+      car.hitFlashTimer = 0;
+
+      input.throttle = 0;
+      input.steer = 0;
+
+      totalRaceTime = 0;
+      currentLapTime = 0;
+      bestLapTime = Infinity;
+      currentLap = 1;
+      distanceTraveled = 0;
+
+      obstacles = [];
+      particles = [];
+      skidMarks = [];
+      nextObstacleSpawnY = -550;
+
+      // Pre-populate initial obstacles ahead on the track
+      for (let y = -550; y > -2600; y -= 280) {
+        spawnObstacleAt(y);
+      }
+
+      updateHUD();
+    }
+
+    /**
+     * Spawns either a traffic cone or an oil slick on the asphalt at a given world Y.
+     */
+    function spawnObstacleAt(worldY) {
+      // Keep start/finish line areas clear of obstacles
+      const distMod = Math.abs(worldY) % LAP_DISTANCE;
+      if (distMod < 220 || distMod > LAP_DISTANCE - 220) return;
+
+      const roadCenter = getRoadCenterX(worldY);
+      const lateralOffset = (Math.random() * 2 - 1) * (ROAD_HALF_WIDTH - 36);
+      const isOil = Math.random() < 0.38;
+
+      obstacles.push({
+        type: isOil ? 'OIL' : 'CONE',
+        x: roadCenter + lateralOffset,
+        y: worldY,
+        radius: isOil ? 24 : 13,
+        hit: false,
+        vx: 0,
+        vy: 0
+      });
+    }
+
+    /**
+     * Input Event Listeners (Arrow Keys & WASD)
+     */
+    window.addEventListener('keydown', (e) => {
+      switch (e.code) {
+        case 'ArrowUp':
+        case 'KeyW':
+          keys.up = true;
+          e.preventDefault();
+          break;
+        case 'ArrowDown':
+        case 'KeyS':
+          keys.down = true;
+          e.preventDefault();
+          break;
+        case 'ArrowLeft':
+        case 'KeyA':
+          keys.left = true;
+          e.preventDefault();
+          break;
+        case 'ArrowRight':
+        case 'KeyD':
+          keys.right = true;
+          e.preventDefault();
+          break;
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      switch (e.code) {
+        case 'ArrowUp':
+        case 'KeyW':
+          keys.up = false;
+          break;
+        case 'ArrowDown':
+        case 'KeyS':
+          keys.down = false;
+          break;
+        case 'ArrowLeft':
+        case 'KeyA':
+          keys.left = false;
+          break;
+        case 'ArrowRight':
+        case 'KeyD':
+          keys.right = false;
+          break;
+      }
+    });
+
+    // Menu Button Handlers
+    startBtn.addEventListener('click', () => {
+      mainMenuEl.classList.add('hidden');
+      gameOverMenuEl.classList.add('hidden');
+      hudEl.classList.remove('hidden');
+      initRace();
+      gameState = STATE.RACING;
+    });
+
+    restartBtn.addEventListener('click', () => {
+      gameOverMenuEl.classList.add('hidden');
+      hudEl.classList.remove('hidden');
+      initRace();
+      gameState = STATE.RACING;
+    });
+
+    /**
+     * Updates 2D Car Kinematics, Surface Grip, Drifting, Obstacles, and Lap Progress.
+     */
+    function updatePhysics(dt) {
+      // 1. Smoothly interpolate player throttle and steering inputs
+      const targetThrottle = (keys.up ? 1 : 0) - (keys.down ? 1 : 0);
+      const targetSteer = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+
+      const throttleSmoothRate = 6.5;
+      const steerSmoothRate = 8.0;
+
+      input.throttle += (targetThrottle - input.throttle) * Math.min(1, throttleSmoothRate * dt);
+      input.steer += (targetSteer - input.steer) * Math.min(1, steerSmoothRate * dt);
+
+      if (Math.abs(input.throttle) < 0.01) input.throttle = 0;
+      if (Math.abs(input.steer) < 0.01) input.steer = 0;
+
+      // 2. Determine track boundaries (Asphalt vs. Rumble Strip vs. Grass)
+      const roadCenter = getRoadCenterX(car.y);
+      const distFromCenter = Math.abs(car.x - roadCenter);
+      car.isOffRoad = distFromCenter > ROAD_HALF_WIDTH;
+
+      if (car.oilSlickTimer > 0) car.oilSlickTimer -= dt;
+      if (car.hitFlashTimer > 0) car.hitFlashTimer -= dt;
+
+      // 3. Calculate Car Local Unit Basis Vectors from Current Heading Angle
+      const forwardX = Math.sin(car.angle);
+      const forwardY = -Math.cos(car.angle);
+      const rightX = Math.cos(car.angle);
+      const rightY = Math.sin(car.angle);
+
+      // Project current 2D velocity vector onto car's local Forward and Lateral axes
+      let forwardSpeed = car.vx * forwardX + car.vy * forwardY;
+      let lateralSpeed = car.vx * rightX + car.vy * rightY;
+
+      // 4. Velocity-Dependent Steering Model
+      const speedFactor = Math.min(Math.abs(forwardSpeed) / 145, 1.0);
+      const directionSign = forwardSpeed >= -5 ? 1 : -1;
+      const offRoadSteerPenalty = car.isOffRoad ? 0.58 : 1.0;
+
+      const angularVelocity =
+        input.steer *
+        car.maxSteerRate *
+        speedFactor *
+        directionSign *
+        offRoadSteerPenalty;
+
+      car.angle += angularVelocity * dt;
+
+      // 5. Longitudinal Forces: Engine Power, Braking, Rolling Resistance, Off-Road Drag
+      let longitudinalAccel = 0;
+      if (input.throttle > 0) {
+        longitudinalAccel = input.throttle * car.enginePower;
+      } else if (input.throttle < 0) {
+        if (forwardSpeed > 15) {
+          longitudinalAccel = input.throttle * car.brakingForce;
+        } else {
+          longitudinalAccel = input.throttle * car.reversePower;
+        }
+      }
+
+      const rollingFriction = car.isOffRoad ? 3.4 : car.rollingResistance;
+      const dragForce =
+        forwardSpeed * rollingFriction +
+        forwardSpeed * Math.abs(forwardSpeed) * car.airDrag;
+
+      forwardSpeed += (longitudinalAccel - dragForce) * dt;
+      forwardSpeed = Math.max(-220, Math.min(790, forwardSpeed));
+
+      // 6. Lateral Grip & High-Speed Drifting Mechanic
+      const sharpTurnAtSpeed = Math.abs(input.steer) > 0.38 && forwardSpeed > 360;
+      car.isDrifting =
+        (sharpTurnAtSpeed || Math.abs(lateralSpeed) > 85 || car.oilSlickTimer > 0) &&
+        Math.abs(forwardSpeed) > 180;
+
+      lateralSpeed += angularVelocity * forwardSpeed * 0.42 * dt;
+
+      let currentLateralGrip = car.lateralGrip;
+      if (car.oilSlickTimer > 0) {
+        currentLateralGrip = 1.6;
+      } else if (car.isOffRoad) {
+        currentLateralGrip = 3.8;
+      } else if (sharpTurnAtSpeed) {
+        currentLateralGrip = 4.2;
+      }
+
+      lateralSpeed *= Math.max(0, 1 - currentLateralGrip * dt);
+
+      let targetDriftAngle = 0;
+      if (car.isDrifting) {
+        targetDriftAngle =
+          input.steer * 0.28 * Math.min(1, forwardSpeed / 650) +
+          Math.atan2(lateralSpeed, Math.abs(forwardSpeed) + 60) * 0.45;
+      }
+      const snapSpeed = car.isDrifting ? 7.0 : 12.0;
+      car.driftAngle += (targetDriftAngle - car.driftAngle) * Math.min(1, snapSpeed * dt);
+      car.visualAngle = car.angle + car.driftAngle;
+
+      // 7. Reconstruct 2D World Velocity & Update Position
+      const newForwardX = Math.sin(car.angle);
+      const newForwardY = -Math.cos(car.angle);
+      const newRightX = Math.cos(car.angle);
+      const newRightY = Math.sin(car.angle);
+
+      const prevVx = car.vx;
+      const prevVy = car.vy;
+
+      car.vx = newForwardX * forwardSpeed + newRightX * lateralSpeed;
+      car.vy = newForwardY * forwardSpeed + newRightY * lateralSpeed;
+
+      car.ax = (car.vx - prevVx) / Math.max(dt, 0.001);
+      car.ay = (car.vy - prevVy) / Math.max(dt, 0.001);
+
+      car.x += car.vx * dt;
+      car.y += car.vy * dt;
+
+      // Keep car within the physical screen edges
+      const minX = 32;
+      const maxX = CANVAS_WIDTH - 32;
+      if (car.x < minX) {
+        car.x = minX;
+        car.vx = Math.max(0, car.vx * -0.3);
+      } else if (car.x > maxX) {
+        car.x = maxX;
+        car.vx = Math.min(0, car.vx * -0.3);
+      }
+
+      // 8. Emit Tire Skid Marks and Smoke/Grass Particles
+      if (car.isDrifting || car.isOffRoad) {
+        emitTireEffects();
+      }
+
+      // 9. Spawn & Update Dynamic Obstacles + Collision Detection
+      while (nextObstacleSpawnY > car.y - 1400) {
+        spawnObstacleAt(nextObstacleSpawnY);
+        nextObstacleSpawnY -= 210 + Math.random() * 160;
+      }
+
+      updateObstaclesAndCollisions(dt);
+      updateParticles(dt);
+
+      // 10. Track Distance, Laps, and Timers
+      totalRaceTime += dt;
+      currentLapTime += dt;
+
+      distanceTraveled = Math.max(distanceTraveled, -car.y);
+      const calculatedLap = Math.floor(distanceTraveled / LAP_DISTANCE) + 1;
+
+      if (calculatedLap > currentLap) {
+        if (currentLapTime < bestLapTime) {
+          bestLapTime = currentLapTime;
+        }
+        currentLapTime = 0;
+        currentLap = calculatedLap;
+
+        if (currentLap > TOTAL_LAPS) {
+          triggerGameOver();
+          return;
+        }
+      }
+
+      updateHUD();
+    }
+
+    /**
+     * Checks radius-based collisions between the player's car and track obstacles.
+     */
+    function updateObstaclesAndCollisions(dt) {
+      const carRadius = 18;
+
+      for (let i = obstacles.length - 1; i >= 0; i--) {
+        const obs = obstacles[i];
+
+        if (obs.hit) {
+          obs.x += obs.vx * dt;
+          obs.y += obs.vy * dt;
+          obs.vx *= Math.max(0, 1 - 3.5 * dt);
+          obs.vy *= Math.max(0, 1 - 3.5 * dt);
+        }
+
+        if (obs.y > car.y + 300) {
+          obstacles.splice(i, 1);
+          continue;
+        }
+
+        if (!obs.hit) {
+          const dx = car.x - obs.x;
+          const dy = car.y - obs.y;
+          const distSq = dx * dx + dy * dy;
+          const minDist = carRadius + obs.radius;
+
+          if (distSq < minDist * minDist) {
+            obs.hit = true;
+            car.hitFlashTimer = 0.22;
+
+            if (obs.type === 'CONE') {
+              obs.vx = car.vx * 1.35 + (Math.random() - 0.5) * 160;
+              obs.vy = car.vy * 1.35 - 120;
+              car.vx *= 0.42;
+              car.vy *= 0.42;
+              spawnImpactParticles(obs.x, obs.y, '#ff6d00', 14);
+            } else if (obs.type === 'OIL') {
+              car.vx *= 0.62;
+              car.vy *= 0.62;
+              car.oilSlickTimer = 1.15;
+              car.driftAngle += (Math.random() < 0.5 ? -1 : 1) * 0.42;
+              spawnImpactParticles(obs.x, obs.y, '#263238', 12);
+            }
+          }
+        }
+      }
+    }
+
+    /**
+     * Generates skid marks and tire smoke / dirt particles behind the rear wheels.
+     */
+    function emitTireEffects() {
+      const cosA = Math.cos(car.visualAngle);
+      const sinA = Math.sin(car.visualAngle);
+
+      const wheelOffsets = [
+        { lx: -11, ly: 18 },
+        { lx: 11, ly: 18 }
+      ];
+
+      for (const w of wheelOffsets) {
+        const wx = car.x + w.lx * cosA - w.ly * sinA;
+        const wy = car.y + w.lx * sinA + w.ly * cosA;
+
+        skidMarks.push({
+          x: wx,
+          y: wy,
+          alpha: car.isOffRoad ? 0.35 : 0.48,
+          color: car.isOffRoad ? '#3e2723' : '#101419'
+        });
+
+        if (Math.random() < 0.55) {
+          particles.push({
+            x: wx + (Math.random() - 0.5) * 6,
+            y: wy + (Math.random() - 0.5) * 6,
+            vx: (Math.random() - 0.5) * 35,
+            vy: (Math.random() - 0.5) * 35,
+            radius: 4 + Math.random() * 5,
+            alpha: 0.55,
+            color: car.isOffRoad ? '#6d4c41' : '#cfd8dc'
+          });
+        }
+      }
+
+      if (skidMarks.length > 260) {
+        skidMarks.splice(0, skidMarks.length - 260);
+      }
+    }
+
+    function spawnImpactParticles(x, y, color, count) {
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 60 + Math.random() * 180;
+        particles.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          radius: 3 + Math.random() * 4,
+          alpha: 0.95,
+          color
+        });
+      }
+    }
+
+    function updateParticles(dt) {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.radius += 8 * dt;
+        p.alpha -= 1.4 * dt;
+        if (p.alpha <= 0) {
+          particles.splice(i, 1);
+        }
+      }
+
+      for (let i = skidMarks.length - 1; i >= 0; i--) {
+        skidMarks[i].alpha -= 0.18 * dt;
+        if (skidMarks[i].alpha <= 0) {
+          skidMarks.splice(i, 1);
+        }
+      }
+    }
+
+    /**
+     * Updates DOM HUD elements with current speed, surface state, lap counter, and timers.
+     */
+    function updateHUD() {
+      const speedPx = Math.hypot(car.vx, car.vy);
+      const kmh = Math.round(speedPx * 0.36);
+
+      speedValueEl.textContent = String(kmh).padStart(3, '0');
+      speedBarFillEl.style.width = `${Math.min(100, (kmh / 280) * 100)}%`;
+
+      if (car.isOffRoad) {
+        statusBadgeEl.textContent = 'OFF-ROAD GRASS';
+        statusBadgeEl.className = 'status-badge offroad';
+      } else if (car.isDrifting) {
+        statusBadgeEl.textContent = 'DRIFTING';
+        statusBadgeEl.className = 'status-badge drift';
+      } else {
+        statusBadgeEl.textContent = 'HIGH GRIP';
+        statusBadgeEl.className = 'status-badge';
+      }
+
+      const displayLap = Math.min(currentLap, TOTAL_LAPS);
+      lapValueEl.textContent = `${displayLap} / ${TOTAL_LAPS}`;
+      lapTimeValueEl.textContent = formatTime(currentLapTime);
+      totalTimeValueEl.textContent = formatTime(totalRaceTime);
+    }
+
+    /**
+     * Halts physics and transitions to the Game Over screen after 3 completed laps.
+     */
+    function triggerGameOver() {
+      gameState = STATE.GAMEOVER;
+      car.vx = 0;
+      car.vy = 0;
+
+      hudEl.classList.add('hidden');
+      gameOverMenuEl.classList.remove('hidden');
+
+      finalTimeEl.textContent = formatTime(totalRaceTime);
+      bestLapTimeEl.textContent = formatTime(
+        isFinite(bestLapTime) ? bestLapTime : totalRaceTime / TOTAL_LAPS
+      );
+    }
+
+    /**
+     * Renders the scrolling grass, rumble strips, asphalt road, dashed lines, obstacles, and car.
+     */
+    function render() {
+      ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+      // 1. Draw Grass Background with Scrolling Mow Stripes
+      const stripeHeight = 40;
+      for (let sy = -stripeHeight; sy < CANVAS_HEIGHT + stripeHeight; sy += stripeHeight) {
+        const worldY = car.y - (CAR_SCREEN_Y - sy);
+        const stripeIndex = Math.floor(worldY / stripeHeight);
+        const snappedScreenY = CAR_SCREEN_Y + (stripeIndex * stripeHeight - car.y);
+
+        ctx.fillStyle = Math.abs(stripeIndex) % 2 === 0 ? '#1b4d2e' : '#164025';
+        ctx.fillRect(0, snappedScreenY, CANVAS_WIDTH, stripeHeight + 1);
+      }
+
+      // 2. Sample Road Geometry from Top to Bottom of Canvas
+      const step = 8;
+      const samples = [];
+      for (let sy = -step; sy <= CANVAS_HEIGHT + step; sy += step) {
+        const worldY = car.y - (CAR_SCREEN_Y - sy);
+        samples.push({
+          sy,
+          worldY,
+          centerX: getRoadCenterX(worldY)
+        });
+      }
+
+      // 3. Draw Red and White Alternating Rumble Strips on Track Edges
+      const rumbleSegmentLen = 28;
+      for (let i = 0; i < samples.length - 1; i++) {
+        const s1 = samples[i];
+        const s2 = samples[i + 1];
+        const isRed = Math.floor(Math.abs(s1.worldY) / rumbleSegmentLen) % 2 === 0;
+        ctx.fillStyle = isRed ? '#e53935' : '#f5f7fa';
+
+        // Left Rumble Strip
+        ctx.beginPath();
+        ctx.moveTo(s1.centerX - ROAD_HALF_WIDTH - RUMBLE_WIDTH, s1.sy);
+        ctx.lineTo(s1.centerX - ROAD_HALF_WIDTH, s1.sy);
+        ctx.lineTo(s2.centerX - ROAD_HALF_WIDTH, s2.sy);
+        ctx.lineTo(s2.centerX - ROAD_HALF_WIDTH - RUMBLE_WIDTH, s2.sy);
+        ctx.closePath();
+        ctx.fill();
+
+        // Right Rumble Strip
+        ctx.beginPath();
+        ctx.moveTo(s1.centerX + ROAD_HALF_WIDTH, s1.sy);
+        ctx.lineTo(s1.centerX + ROAD_HALF_WIDTH + RUMBLE_WIDTH, s1.sy);
+        ctx.lineTo(s2.centerX + ROAD_HALF_WIDTH + RUMBLE_WIDTH, s2.sy);
+        ctx.lineTo(s2.centerX + ROAD_HALF_WIDTH, s2.sy);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // 4. Draw Continuous Asphalt Road Surface
+      ctx.fillStyle = '#262c36';
+      ctx.beginPath();
+      for (let i = 0; i < samples.length; i++) {
+        const s = samples[i];
+        if (i === 0) ctx.moveTo(s.centerX - ROAD_HALF_WIDTH, s.sy);
+        else ctx.lineTo(s.centerX - ROAD_HALF_WIDTH, s.sy);
+      }
+      for (let i = samples.length - 1; i >= 0; i--) {
+        const s = samples[i];
+        ctx.lineTo(s.centerX + ROAD_HALF_WIDTH, s.sy);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      // Subtle White Shoulder Lines Inside Asphalt Edges
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.lineWidth = 3;
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        for (let i = 0; i < samples.length; i++) {
+          const s = samples[i];
+          const x = s.centerX + side * (ROAD_HALF_WIDTH - 6);
+          if (i === 0) ctx.moveTo(x, s.sy);
+          else ctx.lineTo(x, s.sy);
+        }
+        ctx.stroke();
+      }
+
+      // 5. Draw Moving Dashed White Center-Lines
+      const dashPeriod = 72;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.lineWidth = 5;
+      for (let i = 0; i < samples.length - 1; i++) {
+        const s1 = samples[i];
+        const s2 = samples[i + 1];
+        const phase = ((s1.worldY % dashPeriod) + dashPeriod) % dashPeriod;
+        if (phase < dashPeriod * 0.48) {
+          ctx.beginPath();
+          ctx.moveTo(s1.centerX, s1.sy);
+          ctx.lineTo(s2.centerX, s2.sy);
+          ctx.stroke();
+        }
+      }
+
+      // 6. Draw Checkered Start / Finish Lines at Every Lap Interval
+      for (let lapIdx = 0; lapIdx <= TOTAL_LAPS; lapIdx++) {
+        const lineWorldY = -lapIdx * LAP_DISTANCE;
+        const screenY = CAR_SCREEN_Y + (lineWorldY - car.y);
+        if (screenY > -40 && screenY < CANVAS_HEIGHT + 40) {
+          drawFinishLine(lineWorldY, screenY);
+        }
+      }
+
+      // 7. Draw Tire Skid Marks
+      for (const mark of skidMarks) {
+        const sy = CAR_SCREEN_Y + (mark.y - car.y);
+        if (sy < -10 || sy > CANVAS_HEIGHT + 10) continue;
+        ctx.fillStyle = mark.color;
+        ctx.globalAlpha = Math.max(0, mark.alpha);
+        ctx.beginPath();
+        ctx.arc(mark.x, sy, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // 8. Draw Obstacles (Oil Slicks & Traffic Cones)
+      for (const obs of obstacles) {
+        const sy = CAR_SCREEN_Y + (obs.y - car.y);
+        if (sy < -50 || sy > CANVAS_HEIGHT + 50) continue;
+
+        if (obs.type === 'OIL') {
+          drawOilSlick(obs.x, sy, obs.radius);
+        } else {
+          drawTrafficCone(obs.x, sy, obs.radius);
+        }
+      }
+
+      // 9. Draw Smoke & Impact Particles
+      for (const p of particles) {
+        const sy = CAR_SCREEN_Y + (p.y - car.y);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = Math.max(0, p.alpha);
+        ctx.beginPath();
+        ctx.arc(p.x, sy, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // 10. Draw Player's Car
+      drawPlayerCar();
+    }
+
+    /**
+     * Draws a checkered Start/Finish line across the asphalt road.
+     */
+    function drawFinishLine(worldY, screenY) {
+      const centerX = getRoadCenterX(worldY);
+      const startX = centerX - ROAD_HALF_WIDTH + 8;
+      const totalWidth = (ROAD_HALF_WIDTH - 8) * 2;
+      const cols = 16;
+      const squareW = totalWidth / cols;
+      const squareH = 12;
+
+      for (let row = 0; row < 2; row++) {
+        for (let col = 0; col < cols; col++) {
+          ctx.fillStyle = (row + col) % 2 === 0 ? '#ffffff' : '#111111';
+          ctx.fillRect(
+            startX + col * squareW,
+            screenY - squareH + row * squareH,
+            squareW + 0.5,
+            squareH
+          );
+        }
+      }
+    }
+
+    /**
+     * Draws an oil slick puddle using overlapping arcs.
+     */
+    function drawOilSlick(x, y, radius) {
+      ctx.save();
+      ctx.translate(x, y);
+
+      ctx.fillStyle = '#0b0e14';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, radius * 1.15, radius * 0.82, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.22)';
+      ctx.beginPath();
+      ctx.ellipse(-4, -3, radius * 0.65, radius * 0.4, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    /**
+     * Draws a high-visibility orange and white traffic cone.
+     */
+    function drawTrafficCone(x, y, radius) {
+      ctx.save();
+      ctx.translate(x, y);
+
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.beginPath();
+      ctx.arc(3, 4, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#e65100';
+      ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+
+      ctx.fillStyle = '#ff6d00';
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * 0.85, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ff3d00';
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    /**
+     * Draws the player's sleek sports car with headlights, taillights, steering wheels, and cockpit.
+     */
+    function drawPlayerCar() {
+      ctx.save();
+      ctx.translate(car.x, CAR_SCREEN_Y);
+      ctx.rotate(car.visualAngle);
+
+      const w = car.width;
+      const l = car.length;
+
+      // 1. Headlight Beams
+      const beamGrad = ctx.createLinearGradient(0, -l / 2, 0, -l / 2 - 110);
+      beamGrad.addColorStop(0, 'rgba(224, 247, 250, 0.28)');
+      beamGrad.addColorStop(1, 'rgba(224, 247, 250, 0)');
+      ctx.fillStyle = beamGrad;
+
+      ctx.beginPath();
+      ctx.moveTo(-w / 2 + 3, -l / 2);
+      ctx.lineTo(-w / 2 - 22, -l / 2 - 110);
+      ctx.lineTo(w / 2 + 22, -l / 2 - 110);
+      ctx.lineTo(w / 2 - 3, -l / 2);
+      ctx.closePath();
+      ctx.fill();
+
+      // 2. Car Drop Shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.48)';
+      ctx.beginPath();
+      ctx.roundRect(-w / 2 + 3, -l / 2 + 5, w, l, 8);
+      ctx.fill();
+
+      // 3. Four Wheels (Front wheels pivot with steering input)
+      const frontWheelAngle = input.steer * 0.38;
+      const wheels = [
+        { x: -w / 2 - 2, y: -l / 2 + 11, steer: frontWheelAngle },
+        { x: w / 2 - 3, y: -l / 2 + 11, steer: frontWheelAngle },
+        { x: -w / 2 - 2, y: l / 2 - 14, steer: 0 },
+        { x: w / 2 - 3, y: l / 2 - 14, steer: 0 }
+      ];
+
+      ctx.fillStyle = '#111318';
+      for (const wheel of wheels) {
+        ctx.save();
+        ctx.translate(wheel.x + 2.5, wheel.y + 5);
+        ctx.rotate(wheel.steer);
+        ctx.fillRect(-3, -6, 6, 12);
+        ctx.restore();
+      }
+
+      // 4. Sleek Aerodynamic Chassis Body
+      ctx.fillStyle = car.hitFlashTimer > 0 ? '#ffffff' : '#ff2a4b';
+      ctx.beginPath();
+      ctx.roundRect(-w / 2, -l / 2, w, l, 9);
+      ctx.fill();
+
+      // Center Racing Stripe
+      ctx.fillStyle = '#181e29';
+      ctx.fillRect(-4, -l / 2 + 2, 8, l - 4);
+
+      // 5. Cabin & Windshield
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.roundRect(-w / 2 + 4, -l / 2 + 14, w - 8, 26, 5);
+      ctx.fill();
+
+      // Roof Panel
+      ctx.fillStyle = car.hitFlashTimer > 0 ? '#ffffff' : '#d81b3a';
+      ctx.beginPath();
+      ctx.roundRect(-w / 2 + 6, -l / 2 + 22, w - 12, 12, 3);
+      ctx.fill();
+
+      // 6. Front Headlights
+      ctx.fillStyle = '#e0f7fa';
+      ctx.fillRect(-w / 2 + 3, -l / 2 + 1, 6, 3);
+      ctx.fillRect(w / 2 - 9, -l / 2 + 1, 6, 3);
+
+      // 7. Rear Taillights & Brake Glow
+      const isBraking = keys.down;
+      ctx.fillStyle = isBraking ? '#ff1744' : '#b71c1c';
+      ctx.fillRect(-w / 2 + 3, l / 2 - 4, 7, 3);
+      ctx.fillRect(w / 2 - 10, l / 2 - 4, 7, 3);
+
+      if (isBraking) {
+        ctx.fillStyle = 'rgba(255, 23, 68, 0.55)';
+        ctx.beginPath();
+        ctx.arc(-w / 2 + 6.5, l / 2 - 2, 7, 0, Math.PI * 2);
+        ctx.arc(w / 2 - 6.5, l / 2 - 2, 7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    /**
+     * Main Frame-Rate Independent Game Loop using window.requestAnimationFrame
+     */
+    function gameLoop(timestamp) {
+      const dt = Math.min((timestamp - lastFrameTime) / 1000, 0.05);
+      lastFrameTime = timestamp;
+
+      if (gameState === STATE.RACING) {
+        updatePhysics(dt);
+      }
+
+      render();
+      window.requestAnimationFrame(gameLoop);
+    }
+
+    // Initialize scene and kick off the render loop
+    initRace();
+    window.requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>
